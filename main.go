@@ -27,6 +27,7 @@ type album struct {
 }
 
 type Music struct {
+	ID         int    `json:"id"`
 	MusicID    string `json:"music_id"`
 	MusicTitle string `json:"music_title"`
 }
@@ -118,9 +119,10 @@ func createMusic(c *gin.Context) {
 	log.Println(musicID)
 	log.Println(musicTitle)
 
-	if musicID == "" || musicTitle == "" {
-		// response = JsonResponse{Type: "error", Message: "You are missing musicID or musicTitle parameter."}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "You are missing musicID or musicTitle parameter"})
+	if musicID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "You are missing music_id parameter"})
+	} else if musicTitle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "You are missing music_title parameter"})
 	} else {
 		printMessage("Inserting music into DB")
 
@@ -134,9 +136,62 @@ func createMusic(c *gin.Context) {
 		// check errors
 		CheckError(err)
 		c.JSON(http.StatusBadRequest, gin.H{"type": "success", "message": "The music has been inserted successfully!"})
-
-		// response = JsonResponse{Type: "success", Message: "The music has been inserted successfully!"}
 	}
+}
+
+func editMusic(c *gin.Context) {
+	var music Music
+	if err := c.ShouldBindJSON(&music); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	getID := music.ID
+	musicID := music.MusicID
+	musicTitle := music.MusicTitle
+	log.Println(getID)
+	log.Println(musicID)
+	log.Println(musicTitle)
+
+	if musicID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "You are missing music_id parameter"})
+	} else if musicTitle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "You are missing music_title parameter"})
+	} else {
+		printMessage("Inserting music into DB")
+
+		fmt.Println("Inserting new music with ID: " + musicID + " and name: " + musicTitle)
+
+		db := setupDB()
+
+		_, err := db.Exec("UPDATE music.music SET musicid=$2, musictitle=$3 WHERE id=$1;", getID, musicID, musicTitle)
+
+		// check errors
+		CheckError(err)
+		c.JSON(http.StatusBadRequest, gin.H{"type": "success", "message": "The music has been updated successfully!"})
+	}
+}
+
+func getMusic(c *gin.Context) {
+	db := setupDB()
+	printMessage("Getting music...")
+	rows, err := db.Query("SELECT * FROM music.music")
+	var music []Music
+	// check errors
+	CheckError(err)
+	// Foreach music
+	for rows.Next() {
+		var id int
+		var musicID string
+		var musicTitle string
+
+		err = rows.Scan(&id, &musicID, &musicTitle)
+
+		// check errors
+		CheckError(err)
+
+		music = append(music, Music{ID: id, MusicID: musicID, MusicTitle: musicTitle})
+	}
+	c.JSON(http.StatusBadRequest, gin.H{"type": "success", "message": "Get music successfully!", "data": music})
 }
 
 // Function for handling messages
@@ -150,22 +205,6 @@ func main() {
 	// init router gin
 	router := gin.Default()
 
-	// // connection string
-	// psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
-
-	// // open database
-	// db, err := sql.Open("postgres", psqlconn)
-	// CheckError(err)
-
-	// // close database
-	// defer db.Close()
-
-	// // check db
-	// err = db.Ping()
-	// CheckError(err)
-
-	fmt.Println("Connected!")
-
 	router.GET("/get_albums", getAlbums)
 	router.POST("/post_albums", postAlbums)
 	router.GET("/albums/:id", getAlbumByID)
@@ -173,7 +212,8 @@ func main() {
 
 	// api connect with postgres
 	router.POST("/add_music", createMusic)
-	// router.HandleFunc("/movies/", createMusic).Methods("POST")
+	router.POST("/update_music", editMusic)
+	router.GET("/get_music", getMusic)
 
 	router.Run("localhost:8080")
 }
